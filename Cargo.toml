@@ -1,8 +1,9 @@
 [package]
 authors = ["Trent Shailer"]
+description = "Various helper functions, structures, and traits for working on my Rust projects."
 edition = "2024"
 license = "MIT OR Apache-2.0"
-name = "rust-helper"
+name = "ts-rust-helper"
 rust-version = "1.88"
 version = "0.1.0"
 

@@ -9,15 +9,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
-name = "rust-helper"
+name = "simply_colored"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d26fcce2f397e5488affdf681b20c030aa9faa877b92b1825e5d66b08d2fc33"
+
+[[package]]
+name = "ts-rust-helper"
 version = "0.1.0"
 dependencies = [
  "log",
  "simply_colored",
 ]
-
-[[package]]
-name = "simply_colored"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d26fcce2f397e5488affdf681b20c030aa9faa877b92b1825e5d66b08d2fc33"

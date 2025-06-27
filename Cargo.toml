@@ -1,0 +1,25 @@
+[package]
+authors = ["Trent Shailer"]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+name = "rust-helper"
+rust-version = "1.88"
+version = "0.1.0"
+
+[dependencies]
+log = "0.4"
+simply_colored = "0.1"
+
+[lints.rust]
+"deprecated_in_future" = "warn"
+"missing_docs" = "warn"
+"rust_2018_idioms" = "warn"
+"unused_qualifications" = "warn"
+
+[lints.clippy]
+"as_conversions" = "warn"
+"cast_lossless" = "warn"
+"inconsistent_struct_constructor" = "warn"
+"todo" = "warn"
+"unnecessary_self_imports" = "warn"
+"use_self" = "warn"

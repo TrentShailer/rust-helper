@@ -15,7 +15,7 @@ pub trait ConfigFile: Default + DeserializeOwned + Serialize {
     fn config_file_paths() -> Vec<PathBuf>;
 
     /// Return the JSON schema for a given config version.
-    fn schema(version: u64) -> Option<&'static [u8]>;
+    fn schema(version: &str) -> Option<&'static [u8]>;
 
     /// Update a config to the latest version returning if the config was updated.
     fn update(&self) -> (Self, bool);
@@ -35,11 +35,13 @@ pub fn try_get_schema<C: ConfigFile>(
         return Err(VersionError::MissingProperty);
     };
 
-    let Some(version) = version_node.as_u64() else {
-        return Err(VersionError::NotANumber);
+    let Some(version) = version_node.as_str() else {
+        return Err(VersionError::NotAString);
     };
 
-    let schema_bytes = C::schema(version).ok_or(VersionError::InvalidVersion { version })?;
+    let schema_bytes = C::schema(version).ok_or(VersionError::InvalidVersion {
+        version: version.to_string(),
+    })?;
 
     let schema = serde_json::from_slice::<serde_json::Value>(schema_bytes)
         .expect("JSON schema should be valid JSON");
@@ -116,23 +118,23 @@ pub enum VersionError {
     #[non_exhaustive]
     MissingProperty,
 
-    /// The document version is not a number.
+    /// The document version is not a string.
     #[non_exhaustive]
-    NotANumber,
+    NotAString,
 
     /// The document has a version that does not exist.
     #[non_exhaustive]
     InvalidVersion {
         /// The version.
-        version: u64,
+        version: String,
     },
 }
 impl fmt::Display for VersionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Self::MissingProperty => write!(f, "the `_version` property is missing"),
-            Self::NotANumber => write!(f, "the `_version` property is not an integer"),
-            Self::InvalidVersion { version } => write!(f, "the version {version} does not exist"),
+            Self::NotAString => write!(f, "the `_version` property is not a string"),
+            Self::InvalidVersion { version } => write!(f, "the version `{version}` does not exist"),
         }
     }
 }

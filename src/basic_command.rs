@@ -22,3 +22,10 @@ pub enum Command {
     #[command(subcommand)]
     Config(crate::config_command::ConfigSubcommand),
 }
+
+impl Cli {
+    /// Parse the CLI arguments.
+    pub fn parse() -> Self {
+        <Self as Parser>::parse()
+    }
+}

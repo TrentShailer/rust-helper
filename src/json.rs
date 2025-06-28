@@ -244,13 +244,22 @@ impl ValidationProblem {
     fn write_message(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_symbol("  | ", f)?;
 
-        writeln!(
-            f,
-            "{}{RED}{BOLD}{} {}{RESET}",
-            " ".repeat(self.range.start),
-            "^".repeat(self.range.len()),
-            self.message()
-        )
+        match self.output_format {
+            OutputFormat::Basic => writeln!(
+                f,
+                "{}{} {}",
+                " ".repeat(self.range.start),
+                "^".repeat(self.range.len()),
+                self.message()
+            ),
+            OutputFormat::Coloured => writeln!(
+                f,
+                "{}{RED}{BOLD}{} {}{RESET}",
+                " ".repeat(self.range.start),
+                "^".repeat(self.range.len()),
+                self.message()
+            ),
+        }
     }
 
     fn message(&self) -> String {

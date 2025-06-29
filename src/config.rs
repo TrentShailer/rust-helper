@@ -7,7 +7,7 @@ use std::{fs, io, path::PathBuf};
 use jsonschema::ValidationOptions;
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::json::{self, OutputFormat, ValidationErrors};
+use crate::json::{self, OutputFormat, PositionedJsonNode, ValidationErrors};
 
 /// Defined behaviours for a config file.
 pub trait ConfigFile: Default + DeserializeOwned + Serialize {
@@ -67,20 +67,18 @@ pub fn try_load_config<C: ConfigFile>(output_format: OutputFormat) -> Result<C, 
         });
     };
 
-    // Load config
-    let raw_config = {
-        let contents = fs::read(&config_path).map_err(|source| LoadConfigError::ReadError {
+    let contents =
+        fs::read_to_string(&config_path).map_err(|source| LoadConfigError::ReadError {
             path: config_path.clone(),
             source,
         })?;
-
-        serde_json::from_slice::<serde_json::Value>(&contents).map_err(|source| {
-            LoadConfigError::InvalidJson {
-                path: config_path.clone(),
-                source,
-            }
-        })?
-    };
+    // Load config
+    let raw_config = serde_json::from_str::<serde_json::Value>(&contents).map_err(|source| {
+        LoadConfigError::InvalidJson {
+            path: config_path.clone(),
+            source,
+        }
+    })?;
 
     // Load schema
     let schema =
@@ -89,11 +87,15 @@ pub fn try_load_config<C: ConfigFile>(output_format: OutputFormat) -> Result<C, 
             source,
         })?;
 
+    // Do a positioned parse on the document
+    let document = PositionedJsonNode::try_parse(&contents);
+
     // Lint
     json::validate(
         &schema,
         &raw_config,
         ValidationOptions::default(),
+        document.as_ref(),
         Some(config_path.clone()),
         output_format,
     )

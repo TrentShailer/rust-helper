@@ -128,7 +128,7 @@ where
     fn from(value: E) -> Self {
         Self {
             error: Box::new(value),
-            style: ReportStyle::Basic,
+            style: ReportStyle::Coloured,
             operation: option_env!("CARGO_BIN_NAME")
                 .unwrap_or("command")
                 .to_string(),

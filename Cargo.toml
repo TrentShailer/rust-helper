@@ -5,14 +5,14 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 name = "ts-rust-helper"
 rust-version = "1.88"
-version = "0.2.3"
+version = "0.3.0"
 
 [dependencies]
 log = "0.4"
 simply_colored = "0.1"
 
 clap = { version = "4.5", optional = true, features = ["derive"] }
-jsonschema = { version = "0.30", optional = true }
+jsonschema = { version = "0.30", optional = true, default-features = false }
 serde = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
 
@@ -23,15 +23,16 @@ config-command = ["command", "config"]
 json = ["dep:jsonschema", "dep:serde", "dep:serde_json"]
 
 [lints.rust]
-"deprecated_in_future" = "warn"
-"missing_docs" = "warn"
-"rust_2018_idioms" = "warn"
-"unused_qualifications" = "warn"
+deprecated_in_future = "warn"
+missing_docs = "warn"
+rust_2018_idioms = "warn"
+unused_qualifications = "warn"
 
 [lints.clippy]
-"as_conversions" = "warn"
-"cast_lossless" = "warn"
-"inconsistent_struct_constructor" = "warn"
-"todo" = "warn"
-"unnecessary_self_imports" = "warn"
-"use_self" = "warn"
+as_conversions = "warn"
+cast_lossless = "warn"
+dbg_macro = "warn"
+inconsistent_struct_constructor = "warn"
+todo = "warn"
+unnecessary_self_imports = "warn"
+use_self = "warn"

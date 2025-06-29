@@ -1,0 +1,18 @@
+{
+  "$schema": "./config.schema.json",
+  "_version": "v1",
+  "number": false,
+  "valueArray": [
+    "test",
+    4
+  ],
+  "object": {
+    "value": "value"
+  },
+  "objectArray": [
+    {
+      "value": 0
+    },
+    {}
+  ]
+}

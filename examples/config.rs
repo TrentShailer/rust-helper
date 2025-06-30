@@ -16,6 +16,8 @@ use ts_rust_helper::{
 #[serde(tag = "_version")]
 #[serde(rename_all = "camelCase")]
 struct Config {
+    /// A number.
+    /// Try `0`
     number: u64,
     value_array: Vec<String>,
     object: Object,

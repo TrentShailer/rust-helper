@@ -85,25 +85,27 @@ impl ValidationProblem {
 
         let notes = {
             let mut notes = Vec::new();
+
             if let Some(parent) = schema_path.parent()
                 && let Some(node) = schema.pointer(parent.join("description").as_str())
                 && let Some(contents) = node.as_str()
             {
-                let mut chars = contents.chars();
-                notes.push(format!(
-                    "this should be {}{}",
-                    chars
-                        .nth(0)
-                        .map_or_else(|| '\0'.to_lowercase(), |v| v.to_lowercase()),
-                    chars.as_str()
-                ));
-            };
+                let mut lines = contents.split('\n');
 
-            if let Some(parent) = schema_path.parent()
-                && let Some(node) = schema.pointer(parent.join("help").as_str())
-                && let Some(contents) = node.as_str()
-            {
-                notes.push(contents.to_string());
+                if let Some(expected) = lines.next() {
+                    let mut chars = expected.chars();
+                    notes.push(format!(
+                        "this should be {}{}",
+                        chars
+                            .nth(0)
+                            .map_or_else(|| '\0'.to_lowercase(), |v| v.to_lowercase()),
+                        chars.as_str()
+                    ));
+                }
+
+                for line in lines {
+                    notes.push(line.to_string());
+                }
             };
 
             notes

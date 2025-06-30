@@ -17,59 +17,54 @@ pub enum ConfigSubcommand {
     Init,
     /// Reset all configs.
     Reset,
-    /// Update the config to the latest version.
-    Update,
+    /// Output the config JSON schema
+    Schema,
+    /// Lint the config
+    Lint,
 }
 
 impl ConfigSubcommand {
     /// Execute the subcommand.
-    pub fn execute<C: ConfigFile>(
-        &self,
-        output_format: OutputFormat,
-    ) -> Result<(C, bool), ExecuteError> {
+    pub fn execute<C: ConfigFile>(&self, output_format: OutputFormat) -> Result<(), ExecuteError> {
         match &self {
             Self::Init => {
-                let config = Self::init().map_err(|source| ExecuteError::Init { source })?;
-                Ok((config, true))
+                Self::init::<C>().map_err(|source| ExecuteError::Init { source })?;
             }
             Self::Reset => {
-                let config = Self::reset().map_err(|source| ExecuteError::Reset { source })?;
-                Ok((config, true))
+                Self::reset::<C>().map_err(|source| ExecuteError::Reset { source })?;
             }
-            Self::Update => {
-                Self::update(output_format).map_err(|source| ExecuteError::Update { source })
+            Self::Schema => {
+                Self::schema::<C>().map_err(|source| ExecuteError::Schema { source })?;
             }
-        }
+            Self::Lint => {
+                Self::lint::<C>(output_format).map_err(|source| ExecuteError::Lint { source })?;
+            }
+        };
+
+        Ok(())
     }
 
-    /// Update the config.
-    pub fn update<C: ConfigFile>(output_format: OutputFormat) -> Result<(C, bool), UpdateError> {
-        let old_config = try_load_config::<C>(output_format)
-            .map_err(|source| UpdateError::LoadConfig { source })?;
+    /// Lint the config file.
+    pub fn lint<C: ConfigFile>(output_format: OutputFormat) -> Result<(), LoadConfigError> {
+        let _ = try_load_config::<C>(output_format)?;
+        Ok(())
+    }
 
-        let (new_config, updated) = old_config.update();
+    /// Output the schema
+    pub fn schema<C: ConfigFile>() -> serde_json::Result<()> {
+        let json = serde_json::to_string_pretty(&C::schema())?;
+        println!("{json}");
 
-        if updated {
-            old_config
-                .delete()
-                .map_err(|source| UpdateError::DeleteConfig { source })?;
-            new_config
-                .write()
-                .map_err(|source| UpdateError::WriteConfig { source })?;
-        }
-
-        Ok((new_config, updated))
+        Ok(())
     }
 
     /// Initialise the config.
     pub fn init<C: ConfigFile>() -> Result<C, InitError> {
-        for path in C::config_file_paths() {
-            if path
-                .try_exists()
-                .map_err(|source| InitError::CheckPathExists { source })?
-            {
-                return Err(InitError::AlreadyInitialised);
-            }
+        if C::config_file_path()
+            .try_exists()
+            .map_err(|source| InitError::CheckPathExists { source })?
+        {
+            return Err(InitError::AlreadyInitialised);
         }
 
         let config = C::default();
@@ -82,13 +77,12 @@ impl ConfigSubcommand {
 
     /// Reset the config.
     pub fn reset<C: ConfigFile>() -> Result<C, ResetError> {
-        for path in C::config_file_paths() {
-            if path
-                .try_exists()
-                .map_err(|source| ResetError::CheckPathExists { source })?
-            {
-                fs::remove_file(path).map_err(|source| ResetError::DeleteConfig { source })?;
-            }
+        if C::config_file_path()
+            .try_exists()
+            .map_err(|source| ResetError::CheckPathExists { source })?
+        {
+            fs::remove_file(C::config_file_path())
+                .map_err(|source| ResetError::DeleteConfig { source })?;
         }
 
         let config = C::default();
@@ -118,11 +112,18 @@ pub enum ExecuteError {
         source: InitError,
     },
 
-    /// Update failed.
+    /// Schema output failed.
     #[non_exhaustive]
-    Update {
+    Schema {
         /// The source.
-        source: UpdateError,
+        source: serde_json::Error,
+    },
+
+    /// Linting failed.
+    #[non_exhaustive]
+    Lint {
+        /// The source.
+        source: LoadConfigError,
     },
 }
 impl fmt::Display for ExecuteError {
@@ -130,7 +131,13 @@ impl fmt::Display for ExecuteError {
         match &self {
             Self::Reset { .. } => write!(f, "could not reset config"),
             Self::Init { .. } => write!(f, "could not initialise config"),
-            Self::Update { .. } => write!(f, "could not update config"),
+            Self::Schema { .. } => write!(f, "could not output the JSON schema"),
+            Self::Lint { source } => match source {
+                LoadConfigError::ValidationError { .. } => {
+                    write!(f, "linting reported that the config contained errors")
+                }
+                _ => write!(f, "config could not be validated"),
+            },
         }
     }
 }
@@ -139,7 +146,8 @@ impl Error for ExecuteError {
         match &self {
             Self::Reset { source, .. } => Some(source),
             Self::Init { source, .. } => Some(source),
-            Self::Update { source, .. } => Some(source),
+            Self::Schema { source, .. } => Some(source),
+            Self::Lint { source, .. } => Some(source),
         }
     }
 }
@@ -225,50 +233,6 @@ impl Error for InitError {
             Self::CheckPathExists { source, .. } => Some(source),
             Self::WriteConfig { source, .. } => Some(source),
             _ => None,
-        }
-    }
-}
-
-/// Error variants for updating.
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum UpdateError {
-    /// Could not load the config.
-    #[non_exhaustive]
-    LoadConfig {
-        /// The source.
-        source: LoadConfigError,
-    },
-
-    /// Could not write the updated config.
-    #[non_exhaustive]
-    WriteConfig {
-        /// The source.
-        source: io::Error,
-    },
-
-    /// Could not delete the old config.
-    #[non_exhaustive]
-    DeleteConfig {
-        /// The source.
-        source: io::Error,
-    },
-}
-impl fmt::Display for UpdateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            Self::LoadConfig { .. } => write!(f, "could not load the existing config"),
-            Self::WriteConfig { .. } => write!(f, "could not write new config"),
-            Self::DeleteConfig { .. } => write!(f, "could not delete old config"),
-        }
-    }
-}
-impl Error for UpdateError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self {
-            Self::LoadConfig { source, .. } => Some(source),
-            Self::WriteConfig { source, .. } => Some(source),
-            Self::DeleteConfig { source, .. } => Some(source),
         }
     }
 }

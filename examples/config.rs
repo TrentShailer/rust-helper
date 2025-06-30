@@ -3,33 +3,34 @@
 
 use std::{fs, io, path::PathBuf};
 
+use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::{Deserialize, Serialize};
 use ts_rust_helper::{
+    basic_command::{Cli, Command},
     config::{ConfigFile, try_load_config},
     error::ReportResult,
     json::OutputFormat,
 };
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "_version")]
 #[serde(rename_all = "camelCase")]
-enum Config {
-    V1 {
-        number: u64,
-        value_array: Vec<String>,
-        object: Object,
-        object_array: Vec<Object>,
-    },
+struct Config {
+    number: u64,
+    value_array: Vec<String>,
+    object: Object,
+    object_array: Vec<Object>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 struct Object {
     value: f64,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self::V1 {
+        Self {
             number: 0,
             value_array: vec![],
             object: Object { value: 0.0 },
@@ -41,19 +42,15 @@ impl Default for Config {
 impl Config {}
 
 impl ConfigFile for Config {
-    fn config_file_paths() -> Vec<PathBuf> {
-        vec![PathBuf::from("./examples/config.json")]
+    fn config_file_path() -> PathBuf {
+        PathBuf::from("./examples/config.json")
     }
 
-    fn schema(version: &str) -> Option<&'static [u8]> {
-        match version {
-            "v1" => Some(include_bytes!("./config.schema.json")),
-            _ => None,
-        }
-    }
-
-    fn update(&self) -> (Self, bool) {
-        (self.clone(), false)
+    fn schema() -> serde_json::Value {
+        let settings = SchemaSettings::draft07();
+        let generator = settings.into_generator();
+        let schema = generator.into_root_schema_for::<Self>();
+        serde_json::to_value(schema).unwrap()
     }
 
     fn delete(&self) -> io::Result<()> {
@@ -67,6 +64,17 @@ impl ConfigFile for Config {
 }
 
 fn main() -> ReportResult<'static, ()> {
+    let cli = Cli::parse();
+    if let Some(subcommand) = cli.subcommand {
+        match subcommand {
+            Command::Config(config_subcommand) => {
+                config_subcommand.execute::<Config>(OutputFormat::Coloured)?
+            }
+        }
+
+        return Ok(());
+    }
+
     let _config: Config = try_load_config(OutputFormat::Coloured)?;
 
     Ok(())

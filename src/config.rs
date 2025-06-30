@@ -11,14 +11,11 @@ use crate::json::{self, OutputFormat, PositionedJsonNode, ValidationErrors};
 
 /// Defined behaviours for a config file.
 pub trait ConfigFile: Default + DeserializeOwned + Serialize {
-    /// The places to look for existing config paths, ordered in preference.
-    fn config_file_paths() -> Vec<PathBuf>;
+    /// The path to the config file.
+    fn config_file_path() -> PathBuf;
 
-    /// Return the JSON schema for a given config version.
-    fn schema(version: &str) -> Option<&'static [u8]>;
-
-    /// Update a config to the latest version returning if the config was updated.
-    fn update(&self) -> (Self, bool);
+    /// Return the JSON schema for the config.
+    fn schema() -> serde_json::Value;
 
     /// Delete the config file.
     fn delete(&self) -> io::Result<()>;
@@ -27,120 +24,53 @@ pub trait ConfigFile: Default + DeserializeOwned + Serialize {
     fn write(&self) -> io::Result<()>;
 }
 
-/// Try get the schema for a file from it's version.
-pub fn try_get_schema<C: ConfigFile>(
-    document: &serde_json::Value,
-) -> Result<serde_json::Value, VersionError> {
-    let Some(version_node) = document.get("_version") else {
-        return Err(VersionError::MissingProperty);
-    };
-
-    let Some(version) = version_node.as_str() else {
-        return Err(VersionError::NotAString);
-    };
-
-    let schema_bytes = C::schema(version).ok_or(VersionError::InvalidVersion {
-        version: version.to_string(),
-    })?;
-
-    let schema = serde_json::from_slice::<serde_json::Value>(schema_bytes)
-        .expect("JSON schema should be valid JSON");
-    Ok(schema)
-}
-
 /// Try load a config file.
 pub fn try_load_config<C: ConfigFile>(output_format: OutputFormat) -> Result<C, LoadConfigError> {
-    let mut config_path: Option<PathBuf> = None;
-    for candidate_config_path in C::config_file_paths() {
-        if fs::exists(&candidate_config_path).map_err(|source| LoadConfigError::ReadError {
-            path: candidate_config_path.clone(),
-            source,
-        })? {
-            config_path = Some(candidate_config_path);
-            break;
-        }
+    let config_path = C::config_file_path();
+
+    if !fs::exists(&config_path).map_err(|source| LoadConfigError::ReadError {
+        path: config_path.clone(),
+        source,
+    })? {
+        return Err(LoadConfigError::FileNotFound {
+            path: config_path.clone(),
+        });
     }
 
-    let Some(config_path) = config_path else {
-        return Err(LoadConfigError::FileNotFound {
-            path: C::config_file_paths().last().unwrap().to_path_buf(),
-        });
-    };
-
-    let contents =
+    let raw_document =
         fs::read_to_string(&config_path).map_err(|source| LoadConfigError::ReadError {
             path: config_path.clone(),
             source,
         })?;
-    // Load config
-    let raw_config = serde_json::from_str::<serde_json::Value>(&contents).map_err(|source| {
+
+    // Parse the document as a node tree.
+    let document = serde_json::from_str::<serde_json::Value>(&raw_document).map_err(|source| {
         LoadConfigError::InvalidJson {
             path: config_path.clone(),
             source,
         }
     })?;
 
-    // Load schema
-    let schema =
-        try_get_schema::<C>(&raw_config).map_err(|source| LoadConfigError::VersionError {
-            path: config_path.clone(),
-            source,
-        })?;
-
-    // Do a positioned parse on the document
-    let document = PositionedJsonNode::try_parse(&contents);
+    // Try parse the document as a node tree - recording node positions.
+    let positioned_document = PositionedJsonNode::try_parse(&raw_document);
 
     // Lint
     json::validate(
-        &schema,
-        &raw_config,
+        &C::schema(),
+        &document,
         ValidationOptions::default(),
-        document.as_ref(),
+        positioned_document.as_ref(),
         Some(config_path.clone()),
         output_format,
     )
-    .map_err(|source| LoadConfigError::ValidationError {
-        error_count: source.problems.len(),
-        path: config_path,
-        source,
-    })?;
+    .map_err(|source| LoadConfigError::ValidationError { source })?;
 
     // Deserialize
-    let config: C = serde_json::from_value(raw_config)
+    let config: C = serde_json::from_value(document)
         .expect("a file validated by the JSON schema must be able to be deserialized");
 
     Ok(config)
 }
-
-/// Error variants for a documents version.
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum VersionError {
-    /// The document is missing the version property.
-    #[non_exhaustive]
-    MissingProperty,
-
-    /// The document version is not a string.
-    #[non_exhaustive]
-    NotAString,
-
-    /// The document has a version that does not exist.
-    #[non_exhaustive]
-    InvalidVersion {
-        /// The version.
-        version: String,
-    },
-}
-impl fmt::Display for VersionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            Self::MissingProperty => write!(f, "the `_version` property is missing"),
-            Self::NotAString => write!(f, "the `_version` property is not a string"),
-            Self::InvalidVersion { version } => write!(f, "the version `{version}` does not exist"),
-        }
-    }
-}
-impl Error for VersionError {}
 
 /// Error variants from loading the config.
 #[derive(Debug)]
@@ -171,22 +101,9 @@ pub enum LoadConfigError {
         source: serde_json::Error,
     },
 
-    /// The config file has an invalid version.
-    #[non_exhaustive]
-    VersionError {
-        /// The config file.
-        path: PathBuf,
-        /// The source.
-        source: VersionError,
-    },
-
     /// The config file has some validation problems.
     #[non_exhaustive]
     ValidationError {
-        /// The number of problems.
-        error_count: usize,
-        /// The config file.
-        path: PathBuf,
         /// The problems.
         source: ValidationErrors,
     },
@@ -205,21 +122,7 @@ impl fmt::Display for LoadConfigError {
                 "config file `{}` is not valid JSON",
                 path.to_string_lossy()
             ),
-            Self::ValidationError {
-                error_count, path, ..
-            } => write!(
-                f,
-                "config file `{}` generated {} errors",
-                path.to_string_lossy(),
-                error_count
-            ),
-            Self::VersionError { path, .. } => {
-                write!(
-                    f,
-                    "could not determine version for config file `{}`",
-                    path.to_string_lossy()
-                )
-            }
+            Self::ValidationError { source, .. } => write!(f, "{source}"),
         }
     }
 }
@@ -229,8 +132,7 @@ impl Error for LoadConfigError {
             Self::FileNotFound { .. } => None,
             Self::ReadError { source, .. } => Some(source),
             Self::InvalidJson { source, .. } => Some(source),
-            Self::ValidationError { source, .. } => Some(source),
-            Self::VersionError { source, .. } => Some(source),
+            Self::ValidationError { .. } => None,
         }
     }
 }

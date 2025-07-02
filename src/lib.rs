@@ -2,11 +2,10 @@
 //!
 
 #[cfg(feature = "command")]
-pub mod basic_command;
+pub mod command;
 #[cfg(feature = "config")]
 pub mod config;
-#[cfg(feature = "config-command")]
-pub mod config_command;
 pub mod error;
 #[cfg(feature = "json")]
 pub mod json;
+pub mod style;

@@ -2,12 +2,15 @@
 //!
 
 use core::{error::Error, fmt};
-use std::{fs, io, path::PathBuf};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use jsonschema::ValidationOptions;
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::json::{self, OutputFormat, PositionedJsonNode, ValidationErrors};
+use crate::json::{self, PositionedJsonNode, ValidationErrors};
 
 /// Defined behaviours for a config file.
 pub trait ConfigFile: Default + DeserializeOwned + Serialize {
@@ -25,31 +28,19 @@ pub trait ConfigFile: Default + DeserializeOwned + Serialize {
 }
 
 /// Try load a config file.
-pub fn try_load_config<C: ConfigFile>(output_format: OutputFormat) -> Result<C, LoadConfigError> {
-    let config_path = C::config_file_path();
+pub fn try_load_config<C: ConfigFile>() -> Result<C, LoadConfigError> {
+    let path = C::config_file_path();
 
-    if !fs::exists(&config_path).map_err(|source| LoadConfigError::ReadError {
-        path: config_path.clone(),
-        source,
-    })? {
-        return Err(LoadConfigError::FileNotFound {
-            path: config_path.clone(),
-        });
+    if !fs::exists(&path).map_err(|source| LoadConfigError::read_error(&path, source))? {
+        return Err(LoadConfigError::file_not_found(&path));
     }
 
     let raw_document =
-        fs::read_to_string(&config_path).map_err(|source| LoadConfigError::ReadError {
-            path: config_path.clone(),
-            source,
-        })?;
+        fs::read_to_string(&path).map_err(|source| LoadConfigError::read_error(&path, source))?;
 
     // Parse the document as a node tree.
-    let document = serde_json::from_str::<serde_json::Value>(&raw_document).map_err(|source| {
-        LoadConfigError::InvalidJson {
-            path: config_path.clone(),
-            source,
-        }
-    })?;
+    let document = serde_json::from_str::<serde_json::Value>(&raw_document)
+        .map_err(|source| LoadConfigError::invalid_json(&path, source))?;
 
     // Try parse the document as a node tree - recording node positions.
     let positioned_document = PositionedJsonNode::try_parse(&raw_document);
@@ -60,10 +51,9 @@ pub fn try_load_config<C: ConfigFile>(output_format: OutputFormat) -> Result<C, 
         &document,
         ValidationOptions::default(),
         positioned_document.as_ref(),
-        Some(config_path.clone()),
-        output_format,
+        Some(path.clone()),
     )
-    .map_err(|source| LoadConfigError::ValidationError { source })?;
+    .map_err(LoadConfigError::validation_error)?;
 
     // Deserialize
     let config: C = serde_json::from_value(document)
@@ -75,38 +65,45 @@ pub fn try_load_config<C: ConfigFile>(output_format: OutputFormat) -> Result<C, 
 /// Error variants from loading the config.
 #[derive(Debug)]
 #[non_exhaustive]
+#[allow(missing_docs)]
 pub enum LoadConfigError {
-    /// The config could not be found.
     #[non_exhaustive]
-    FileNotFound {
-        /// The path checked.
-        path: PathBuf,
-    },
+    FileNotFound { path: PathBuf },
 
-    /// The config could not be read.
     #[non_exhaustive]
-    ReadError {
-        /// The config file path.
-        path: PathBuf,
-        /// The source.
-        source: io::Error,
-    },
+    ReadError { path: PathBuf, source: io::Error },
 
-    /// The config file is not valid JSON.
     #[non_exhaustive]
     InvalidJson {
-        /// The config file.
         path: PathBuf,
-        /// The source.
         source: serde_json::Error,
     },
 
-    /// The config file has some validation problems.
     #[non_exhaustive]
-    ValidationError {
-        /// The problems.
-        source: ValidationErrors,
-    },
+    ValidationError { source: ValidationErrors },
+}
+impl LoadConfigError {
+    #![allow(missing_docs)]
+    pub fn file_not_found(path: &Path) -> Self {
+        Self::FileNotFound {
+            path: path.to_owned(),
+        }
+    }
+    pub fn read_error(path: &Path, source: io::Error) -> Self {
+        Self::ReadError {
+            path: path.to_owned(),
+            source,
+        }
+    }
+    pub fn invalid_json(path: &Path, source: serde_json::Error) -> Self {
+        Self::InvalidJson {
+            path: path.to_owned(),
+            source,
+        }
+    }
+    pub fn validation_error(source: ValidationErrors) -> Self {
+        Self::ValidationError { source }
+    }
 }
 impl fmt::Display for LoadConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -129,10 +126,9 @@ impl fmt::Display for LoadConfigError {
 impl Error for LoadConfigError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self {
-            Self::FileNotFound { .. } => None,
             Self::ReadError { source, .. } => Some(source),
             Self::InvalidJson { source, .. } => Some(source),
-            Self::ValidationError { .. } => None,
+            _ => None,
         }
     }
 }

@@ -767,12 +767,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "simply_colored"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d26fcce2f397e5488affdf681b20c030aa9faa877b92b1825e5d66b08d2fc33"
-
-[[package]]
 name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -824,7 +818,7 @@ dependencies = [
 
 [[package]]
 name = "ts-rust-helper"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "clap",
  "jsonschema",
@@ -832,7 +826,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "simply_colored",
 ]
 
 [[package]]

@@ -1,5 +1,7 @@
 //! A basic CLI for generic applications.
 
+pub mod config_command;
+
 use clap::{Parser, Subcommand};
 
 /// A basic CLI.
@@ -17,10 +19,9 @@ pub struct Cli {
 /// Subcommands for the CLI.
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    #[cfg(feature = "config-command")]
     /// Config subcommand.
     #[command(subcommand)]
-    Config(crate::config_command::ConfigSubcommand),
+    Config(config_command::ConfigSubcommand),
 }
 
 impl Cli {

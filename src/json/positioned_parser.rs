@@ -76,7 +76,6 @@ impl PositionedJsonNode {
         Self::parse(&mut position, &mut iter).map(|(node, ..)| node)
     }
 
-    /// Try parse
     fn parse<T: Iterator<Item = char>>(
         current_position: &mut Position,
         src: &mut T,

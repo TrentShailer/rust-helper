@@ -5,10 +5,7 @@ use std::{fs, io};
 
 use clap::Subcommand;
 
-use crate::{
-    config::{ConfigFile, LoadConfigError, try_load_config},
-    json::OutputFormat,
-};
+use crate::config::{ConfigFile, LoadConfigError, try_load_config};
 
 /// Subcommands for application config.
 #[derive(Debug, Subcommand)]
@@ -25,7 +22,7 @@ pub enum ConfigSubcommand {
 
 impl ConfigSubcommand {
     /// Execute the subcommand.
-    pub fn execute<C: ConfigFile>(&self, output_format: OutputFormat) -> Result<(), ExecuteError> {
+    pub fn execute<C: ConfigFile>(&self) -> Result<(), ExecuteError> {
         match &self {
             Self::Init => {
                 Self::init::<C>().map_err(|source| ExecuteError::Init { source })?;
@@ -37,7 +34,7 @@ impl ConfigSubcommand {
                 Self::schema::<C>().map_err(|source| ExecuteError::Schema { source })?;
             }
             Self::Lint => {
-                Self::lint::<C>(output_format).map_err(|source| ExecuteError::Lint { source })?;
+                Self::lint::<C>().map_err(|source| ExecuteError::Lint { source })?;
             }
         };
 
@@ -45,8 +42,8 @@ impl ConfigSubcommand {
     }
 
     /// Lint the config file.
-    pub fn lint<C: ConfigFile>(output_format: OutputFormat) -> Result<(), LoadConfigError> {
-        let _ = try_load_config::<C>(output_format)?;
+    pub fn lint<C: ConfigFile>() -> Result<(), LoadConfigError> {
+        let _ = try_load_config::<C>()?;
         Ok(())
     }
 
@@ -94,37 +91,22 @@ impl ConfigSubcommand {
     }
 }
 
+/// Failed to execute the subcommand.
 #[derive(Debug)]
 #[non_exhaustive]
-/// Failed to execute the subcommand.
+#[allow(missing_docs)]
 pub enum ExecuteError {
-    /// Reset failed.
     #[non_exhaustive]
-    Reset {
-        /// The source.
-        source: ResetError,
-    },
+    Reset { source: ResetError },
 
-    /// Initialise failed.
     #[non_exhaustive]
-    Init {
-        /// The source.
-        source: InitError,
-    },
+    Init { source: InitError },
 
-    /// Schema output failed.
     #[non_exhaustive]
-    Schema {
-        /// The source.
-        source: serde_json::Error,
-    },
+    Schema { source: serde_json::Error },
 
-    /// Linting failed.
     #[non_exhaustive]
-    Lint {
-        /// The source.
-        source: LoadConfigError,
-    },
+    Lint { source: LoadConfigError },
 }
 impl fmt::Display for ExecuteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -155,27 +137,16 @@ impl Error for ExecuteError {
 /// Error variants for resetting.
 #[derive(Debug)]
 #[non_exhaustive]
+#[allow(missing_docs)]
 pub enum ResetError {
-    /// Could not check if a config already exists.
     #[non_exhaustive]
-    CheckPathExists {
-        /// The source.
-        source: io::Error,
-    },
+    CheckPathExists { source: io::Error },
 
-    /// Could not write the new config.
     #[non_exhaustive]
-    WriteConfig {
-        /// The source.
-        source: io::Error,
-    },
+    WriteConfig { source: io::Error },
 
-    /// Could not delete a config.
     #[non_exhaustive]
-    DeleteConfig {
-        /// The source.
-        source: io::Error,
-    },
+    DeleteConfig { source: io::Error },
 }
 impl fmt::Display for ResetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -199,24 +170,16 @@ impl Error for ResetError {
 /// Error variants for initialisation.
 #[derive(Debug)]
 #[non_exhaustive]
+#[allow(missing_docs)]
 pub enum InitError {
-    /// Could not check if a config already exists.
     #[non_exhaustive]
-    CheckPathExists {
-        /// The source.
-        source: io::Error,
-    },
+    CheckPathExists { source: io::Error },
 
-    /// A config file already exists.
     #[non_exhaustive]
     AlreadyInitialised,
 
-    /// Failed to write the new config.
     #[non_exhaustive]
-    WriteConfig {
-        /// The source.
-        source: io::Error,
-    },
+    WriteConfig { source: io::Error },
 }
 impl fmt::Display for InitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

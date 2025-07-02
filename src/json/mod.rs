@@ -18,15 +18,6 @@ use serde_json::Value;
 
 pub use positioned_parser::{Position, PositionedJsonNode};
 
-/// The format for the validation output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OutputFormat {
-    /// Basic uncoloured output.
-    Basic,
-    /// Coloured output.
-    Coloured,
-}
-
 /// Validate a JSON instance against a JSON schema.
 pub fn validate(
     schema: &Value,
@@ -34,7 +25,6 @@ pub fn validate(
     validation_options: ValidationOptions,
     document: Option<&PositionedJsonNode>,
     file_path: Option<PathBuf>,
-    output_format: OutputFormat,
 ) -> Result<(), ValidationErrors> {
     let validator = validation_options
         .build(schema)
@@ -48,7 +38,6 @@ pub fn validate(
                 schema,
                 document,
                 file_path.clone(),
-                output_format,
             ));
         }
 
@@ -61,13 +50,12 @@ pub fn validate(
     Ok(())
 }
 
-/// A set of problems with a JSON instance.
+/// A set of problems with a JSON document.
 #[derive(Debug)]
 #[non_exhaustive]
+#[allow(missing_docs)]
 pub struct ValidationErrors {
-    /// Optional path to the file that was validated.
     pub file_path: Option<PathBuf>,
-    /// The set of problems.
     pub problems: Vec<ValidationProblem>,
 }
 impl fmt::Display for ValidationErrors {

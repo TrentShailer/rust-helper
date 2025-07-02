@@ -3,13 +3,14 @@ use std::path::PathBuf;
 
 use jsonschema::{ValidationError, error::ValidationErrorKind, paths::Location};
 use serde_json::Value;
-use simply_colored::{BOLD, CYAN, RED, RESET};
 
-use crate::json::{
-    OutputFormat,
-    location::LocationExtensions,
-    positioned_parser::{Position, PositionedJsonNode},
-    problem_messages::ProblemMessage,
+use crate::{
+    json::{
+        location::LocationExtensions,
+        positioned_parser::{Position, PositionedJsonNode},
+        problem_messages::ProblemMessage,
+    },
+    style::{BOLD, CYAN, RED, RESET, normalize_error},
 };
 
 #[derive(Debug)]
@@ -38,9 +39,6 @@ pub struct ValidationProblem {
     pub source: String,
     /// The range to underline.
     pub range: Range<usize>,
-
-    /// The format to output in.
-    pub output_format: OutputFormat,
 }
 
 impl fmt::Display for ValidationProblem {
@@ -56,10 +54,7 @@ impl fmt::Display for ValidationProblem {
 
             for note in &self.notes {
                 self.write_symbol(" = ", f)?;
-                match self.output_format {
-                    OutputFormat::Basic => writeln!(f, "note: {note}")?,
-                    OutputFormat::Coloured => writeln!(f, "{BOLD}note:{RESET} {note}")?,
-                }
+                writeln!(f, "{BOLD}note:{RESET} {note}")?;
             }
         }
 
@@ -74,7 +69,6 @@ impl ValidationProblem {
         schema: &Value,
         document: Option<&PositionedJsonNode>,
         file_path: Option<PathBuf>,
-        output_format: OutputFormat,
     ) -> Self {
         let ValidationError {
             instance,
@@ -93,18 +87,11 @@ impl ValidationProblem {
                 let mut lines = contents.split('\n');
 
                 if let Some(expected) = lines.next() {
-                    let mut chars = expected.chars();
-                    notes.push(format!(
-                        "this should be {}{}",
-                        chars
-                            .nth(0)
-                            .map_or_else(|| '\0'.to_lowercase(), |v| v.to_lowercase()),
-                        chars.as_str()
-                    ));
+                    notes.push(format!("this should be {}", normalize_error(expected)));
                 }
 
                 for line in lines {
-                    notes.push(line.to_string());
+                    notes.push(normalize_error(line));
                 }
             };
 
@@ -141,7 +128,6 @@ impl ValidationProblem {
             instance_path,
             source,
             range,
-            output_format,
         }
     }
 
@@ -157,20 +143,12 @@ impl ValidationProblem {
 
     fn write_headline(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let headline = self.kind.headline();
-
         let node = self.instance_path.pointing_at();
 
-        match self.output_format {
-            OutputFormat::Basic => {
-                writeln!(f, "error: `{node}` {headline}")
-            }
-            OutputFormat::Coloured => {
-                writeln!(
-                    f,
-                    "{RED}{BOLD}error{RESET}{BOLD}: `{node}` {headline}{RESET}"
-                )
-            }
-        }
+        writeln!(
+            f,
+            "{RED}{BOLD}error{RESET}{BOLD}: `{node}` {headline}{RESET}"
+        )
     }
 
     fn write_file(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -193,10 +171,7 @@ impl ValidationProblem {
 
     fn write_symbol(&self, symbol: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let indent = " ".repeat(self.indent());
-        match self.output_format {
-            OutputFormat::Basic => write!(f, "{indent}{symbol}"),
-            OutputFormat::Coloured => write!(f, "{indent}{BOLD}{CYAN}{symbol}{RESET}"),
-        }
+        write!(f, "{indent}{BOLD}{CYAN}{symbol}{RESET}")
     }
 
     fn write_source(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -204,43 +179,24 @@ impl ValidationProblem {
             && let Some(position) = location.position
         {
             let line = position.line;
-            match self.output_format {
-                OutputFormat::Basic => write!(f, "{line}")?,
-                OutputFormat::Coloured => write!(f, "{BOLD}{CYAN}{line}{RESET}")?,
-            }
+            write!(f, "{BOLD}{CYAN}{line}{RESET}")?;
         }
 
-        match self.output_format {
-            OutputFormat::Basic => write!(f, " | ")?,
-            OutputFormat::Coloured => write!(f, "{BOLD}{CYAN} | {RESET}")?,
-        }
-
-        writeln!(f, "{}", self.source)
+        writeln!(f, "{BOLD}{CYAN} | {RESET}{}", self.source)
     }
 
     fn write_message(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_symbol(" | ", f)?;
 
-        match self.output_format {
-            OutputFormat::Basic => write!(
-                f,
-                "{}{}",
-                " ".repeat(self.range.start),
-                "^".repeat(self.range.len()),
-            )?,
-            OutputFormat::Coloured => write!(
-                f,
-                "{}{RED}{BOLD}{}{RESET}",
-                " ".repeat(self.range.start),
-                "^".repeat(self.range.len()),
-            )?,
-        }
+        write!(
+            f,
+            "{}{RED}{BOLD}{}{RESET}",
+            " ".repeat(self.range.start),
+            "^".repeat(self.range.len()),
+        )?;
 
         if let Some(message) = self.kind.message() {
-            match self.output_format {
-                OutputFormat::Basic => writeln!(f, " {message}")?,
-                OutputFormat::Coloured => writeln!(f, " {RED}{BOLD}{message}{RESET}")?,
-            }
+            writeln!(f, " {RED}{BOLD}{message}{RESET}")?;
         } else {
             writeln!(f)?
         }

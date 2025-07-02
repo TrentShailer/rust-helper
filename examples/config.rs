@@ -6,10 +6,9 @@ use std::{fs, io, path::PathBuf};
 use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::{Deserialize, Serialize};
 use ts_rust_helper::{
-    basic_command::{Cli, Command},
+    command::{Cli, Command},
     config::{ConfigFile, try_load_config},
     error::ReportResult,
-    json::OutputFormat,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
@@ -69,15 +68,13 @@ fn main() -> ReportResult<'static, ()> {
     let cli = Cli::parse();
     if let Some(subcommand) = cli.subcommand {
         match subcommand {
-            Command::Config(config_subcommand) => {
-                config_subcommand.execute::<Config>(OutputFormat::Coloured)?
-            }
+            Command::Config(config_subcommand) => config_subcommand.execute::<Config>()?,
         }
 
         return Ok(());
     }
 
-    let _config: Config = try_load_config(OutputFormat::Coloured)?;
+    let _config: Config = try_load_config()?;
 
     Ok(())
 }

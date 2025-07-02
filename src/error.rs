@@ -2,7 +2,7 @@
 
 use core::{error::Error, fmt};
 
-use simply_colored::{BOLD, RED, RESET};
+use crate::style::{BOLD, RED, RESET};
 
 /// Result that coerces any error into a report for display.
 pub type ReportResult<'a, T, E = Report<'a>> = Result<T, E>;
@@ -12,22 +12,15 @@ pub trait ErrorLogger {
     /// Log the result
     #[track_caller]
     fn log_error(self) -> Self;
-
-    /// Print the result.
-    fn println_error(self) -> Self;
 }
 
 impl<T, E: fmt::Display> ErrorLogger for Result<T, E> {
     #[track_caller]
     fn log_error(self) -> Self {
         if let Err(error) = self.as_ref() {
+            #[cfg(feature = "log")]
             log::error!("{error}");
-        }
-        self
-    }
-
-    fn println_error(self) -> Self {
-        if let Err(error) = self.as_ref() {
+            #[cfg(not(feature = "log"))]
             println!("{error}");
         }
         self
@@ -37,13 +30,9 @@ impl<T> ErrorLogger for Option<T> {
     #[track_caller]
     fn log_error(self) -> Self {
         if self.is_none() {
+            #[cfg(feature = "log")]
             log::error!("value was None");
-        }
-        self
-    }
-
-    fn println_error(self) -> Self {
-        if self.is_none() {
+            #[cfg(not(feature = "log"))]
             println!("value was None");
         }
         self
@@ -53,21 +42,20 @@ impl<T> ErrorLogger for Option<T> {
 /// Extension trait for reporting a result
 pub trait IntoErrorReport<'a, T>: Sized {
     /// Convert the result into a report.
-    fn into_report<S: ToString>(self, style: ReportStyle, operation: S) -> ReportResult<'a, T>;
+    fn into_report<S: ToString>(self, operation: S) -> ReportResult<'a, T>;
 }
 
 impl<'a, T, E: Error + 'a> IntoErrorReport<'a, T> for Result<T, E> {
-    fn into_report<S: ToString>(self, style: ReportStyle, operation: S) -> ReportResult<'a, T> {
+    fn into_report<S: ToString>(self, operation: S) -> ReportResult<'a, T> {
         self.map_err(|error| Report {
             error: Box::new(error),
-            style,
             operation: operation.to_string(),
         })
     }
 }
 
 impl<'a, T> IntoErrorReport<'a, T> for Option<T> {
-    fn into_report<S: ToString>(self, style: ReportStyle, operation: S) -> ReportResult<'a, T> {
+    fn into_report<S: ToString>(self, operation: S) -> ReportResult<'a, T> {
         #[derive(Debug)]
         struct NoneError;
         impl fmt::Display for NoneError {
@@ -79,35 +67,8 @@ impl<'a, T> IntoErrorReport<'a, T> for Option<T> {
 
         self.ok_or_else(|| Report {
             error: Box::new(NoneError),
-            style,
             operation: operation.to_string(),
         })
-    }
-}
-
-/// Report styles.
-pub enum ReportStyle {
-    /// Basic uncoloured.
-    Basic,
-    /// Coloured.
-    Coloured,
-    /// Single line.
-    SingleLine,
-}
-
-impl ReportStyle {
-    /// Write an error with this style.
-    pub fn write_error(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-        index: usize,
-        error: &(dyn Error),
-    ) -> fmt::Result {
-        match &self {
-            Self::Basic => writeln!(f, "  {index}: {error}"),
-            Self::Coloured => writeln!(f, "  {BOLD}{RED}{index}{RESET}{BOLD}:{RESET} {error}"),
-            Self::SingleLine => write!(f, " -> {error}"),
-        }
     }
 }
 
@@ -115,8 +76,6 @@ impl ReportStyle {
 pub struct Report<'a> {
     /// The error stack.
     pub error: Box<dyn Error + 'a>,
-    /// The report style.
-    pub style: ReportStyle,
     /// The operation.
     pub operation: String,
 }
@@ -128,9 +87,8 @@ where
     fn from(value: E) -> Self {
         Self {
             error: Box::new(value),
-            style: ReportStyle::Coloured,
             operation: option_env!("CARGO_BIN_NAME")
-                .unwrap_or("command")
+                .unwrap_or("process")
                 .to_string(),
         }
     }
@@ -150,7 +108,7 @@ impl fmt::Display for Report<'_> {
 
         let mut index = 1;
         while let Some(error) = current_error {
-            self.style.write_error(f, index, error)?;
+            writeln!(f, "  {BOLD}{RED}{index}{RESET}{BOLD}:{RESET} {error}")?;
             current_error = error.source();
             index += 1;
         }

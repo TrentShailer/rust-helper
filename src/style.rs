@@ -155,6 +155,17 @@ mod styled {
     pub const DIM_DEFAULT: &str = "\x1b[39m";
     /// Set background of text to default
     pub const BG_DIM_DEFAULT: &str = "\x1b[49m";
+
+    /// Clear the terminal
+    pub const CLEAR_TERMINAL: &str = "\x1bc";
+    /// Clear the previous line
+    pub const ERASE_LINE_UP: &str = "\x1b[1F\x1b[1G\x1b[0K";
+    /// Move to line start
+    pub const LINE_START: &str = "\x1b[1G";
+    /// Erase the current line
+    pub const ERASE_LINE: &str = "\x1b[0K";
+    /// Move to previous line
+    pub const LINE_UP: &str = "\x1b[1F";
 }
 
 #[cfg(not(feature = "styled"))]
@@ -282,4 +293,15 @@ mod unstyled {
     pub const DIM_DEFAULT: &str = "";
     /// Set background of text to default
     pub const BG_DIM_DEFAULT: &str = "";
+
+    /// Clear the terminal
+    pub const CLEAR_TERMINAL: &str = "";
+    /// Clear the previous line
+    pub const ERASE_LINE_UP: &str = "";
+    /// Move to line start
+    pub const LINE_START: &str = "";
+    /// Erase the current line
+    pub const ERASE_LINE: &str = "";
+    /// Move to previous line
+    pub const LINE_UP: &str = "";
 }

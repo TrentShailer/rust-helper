@@ -1,11 +1,12 @@
 //! Helpers for working with errors.
 
-use core::{error::Error, fmt};
+use core::{
+    error::Error,
+    fmt::{self, Write},
+};
+use std::{env::current_exe, ffi::OsStr, path::PathBuf};
 
 use crate::style::{BOLD, RED, RESET};
-
-/// Result that coerces any error into a report for display.
-pub type ReportResult<'a, T, E = Report<'a>> = Result<T, E>;
 
 /// Trait to log a result.
 pub trait ErrorLogger {
@@ -39,80 +40,152 @@ impl<T> ErrorLogger for Option<T> {
     }
 }
 
+/// Type alias for a program that reports it's exit.
+pub type ReportProgramExit = Result<(), ProgramReport>;
+
+/// A report for a program exit.
+pub struct ProgramReport(Box<dyn Error + 'static>);
+impl<E: Error + 'static> From<E> for ProgramReport {
+    fn from(value: E) -> Self {
+        Self(Box::new(value))
+    }
+}
+impl fmt::Debug for ProgramReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self}")
+    }
+}
+impl fmt::Display for ProgramReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let exe_path = current_exe().unwrap_or_else(|_| PathBuf::from("program"));
+        let exe = exe_path
+            .file_name()
+            .unwrap_or_else(|| OsStr::new("program"))
+            .to_string_lossy();
+
+        let report = Report::new(exe, self.0.as_ref(), ErrorStackStyle::Stacked { indent: 2 });
+        write!(f, "{report}")
+    }
+}
+
 /// Extension trait for reporting a result
 pub trait IntoErrorReport<'a, T>: Sized {
     /// Convert the result into a report.
-    fn into_report<S: ToString>(self, operation: S) -> ReportResult<'a, T>;
+    fn into_report<S: ToString>(self, operation: S) -> Result<T, Report<'a>>;
 }
 
 impl<'a, T, E: Error + 'a> IntoErrorReport<'a, T> for Result<T, E> {
-    fn into_report<S: ToString>(self, operation: S) -> ReportResult<'a, T> {
-        self.map_err(|error| Report {
-            error: Box::new(error),
-            operation: operation.to_string(),
-        })
+    fn into_report<S: ToString>(self, operation: S) -> Result<T, Report<'a>> {
+        self.map_err(|source| Report::new(operation, source, ErrorStackStyle::default()))
     }
 }
 
 impl<'a, T> IntoErrorReport<'a, T> for Option<T> {
-    fn into_report<S: ToString>(self, operation: S) -> ReportResult<'a, T> {
+    fn into_report<S: ToString>(self, operation: S) -> Result<T, Report<'a>> {
         #[derive(Debug)]
         struct NoneError;
         impl fmt::Display for NoneError {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "")
+                write!(f, "value was none")
             }
         }
         impl Error for NoneError {}
 
-        self.ok_or_else(|| Report {
-            error: Box::new(NoneError),
-            operation: operation.to_string(),
-        })
+        self.ok_or_else(|| Report::new(operation, NoneError, ErrorStackStyle::default()))
     }
 }
 
-/// Report for printing a nice error report.
+/// A report of an error.
 pub struct Report<'a> {
-    /// The error stack.
-    pub error: Box<dyn Error + 'a>,
-    /// The operation.
+    /// The source of the error.
+    pub source: Box<dyn Error + 'a>,
+    /// The style of the error.
+    pub style: ErrorStackStyle<'a>,
+    /// The operation this report is for.
     pub operation: String,
 }
-
-impl<'a, E> From<E> for Report<'a>
-where
-    E: Error + 'a,
-{
-    fn from(value: E) -> Self {
+impl<'a> Report<'a> {
+    /// Create a new report.
+    pub fn new<S: ToString, E: Error + 'a>(
+        operation: S,
+        source: E,
+        style: ErrorStackStyle<'a>,
+    ) -> Self {
         Self {
-            error: Box::new(value),
-            operation: option_env!("CARGO_BIN_NAME")
-                .unwrap_or("process")
-                .to_string(),
+            source: Box::new(source),
+            style,
+            operation: operation.to_string(),
         }
     }
 }
-
 impl fmt::Debug for Report<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self}")
     }
 }
-
 impl fmt::Display for Report<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut current_error = Some(self.error.as_ref());
+        let output = self.style.display(self.source.as_ref())?;
 
-        writeln!(f, "`{}` returned unsuccessfully", self.operation)?;
+        writeln!(f, "`{}` reported an error", self.operation)?;
+        writeln!(f, "{output}")?;
 
+        Ok(())
+    }
+}
+
+/// Alias for a closure to format an error.
+pub type FmtErrorClosure<'a> = Box<dyn Fn(&mut String, usize, &dyn Error) -> fmt::Result + 'a>;
+
+/// An error stack style.
+pub enum ErrorStackStyle<'a> {
+    /// An inline style.
+    Inline,
+    /// A stacked style
+    Stacked {
+        /// The indent for each item in the stack.
+        indent: usize,
+    },
+    /// A custom style
+    Custom(FmtErrorClosure<'a>),
+}
+impl Default for ErrorStackStyle<'_> {
+    fn default() -> Self {
+        Self::Stacked { indent: 2 }
+    }
+}
+
+impl ErrorStackStyle<'_> {
+    /// Display an error in the given style.
+    pub fn display(&self, source: &dyn Error) -> Result<String, fmt::Error> {
+        let mut output = String::new();
+
+        let fmt_fn = self.fmt_fn();
+
+        let mut current_error = Some(source);
         let mut index = 1;
         while let Some(error) = current_error {
-            writeln!(f, "  {BOLD}{RED}{index}{RESET}{BOLD}:{RESET} {error}")?;
+            fmt_fn(&mut output, index, error)?;
             current_error = error.source();
             index += 1;
         }
 
-        Ok(())
+        Ok(output)
+    }
+
+    fn fmt_fn(&self) -> FmtErrorClosure<'_> {
+        match &self {
+            Self::Inline => Box::new(|f, i, e| write!(f, " ----- {i}. {e}")),
+
+            Self::Stacked { indent } => Box::new(|f, i, e| {
+                writeln!(
+                    f,
+                    "{}{BOLD}{RED}{i}{RESET}{BOLD}.{RESET} {e}",
+                    " ".repeat(*indent)
+                )
+            }),
+
+            Self::Custom(f) => Box::new(f),
+        }
     }
 }

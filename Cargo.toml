@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 name = "ts-rust-helper"
 rust-version = "1.88"
-version = "0.6.0"
+version = "0.7.0"
 
 [dependencies]
 log = { version = "0.4", optional = true }

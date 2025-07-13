@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use ts_rust_helper::{
     command::{Cli, Command},
     config::{ConfigFile, try_load_config},
-    error::ReportResult,
+    error::ReportProgramExit,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
@@ -64,7 +64,7 @@ impl ConfigFile for Config {
     }
 }
 
-fn main() -> ReportResult<'static, ()> {
+fn main() -> ReportProgramExit {
     let cli = Cli::parse();
     if let Some(subcommand) = cli.subcommand {
         match subcommand {

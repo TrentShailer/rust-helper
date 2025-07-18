@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use ts_rust_helper::{
     command::{Cli, Command},
     config::{ConfigFile, try_load_config},
-    error::ReportProgramExit,
+    error::{IntoErrorReport, ReportProgramExit},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
@@ -74,7 +74,7 @@ fn main() -> ReportProgramExit {
         return Ok(());
     }
 
-    let _config: Config = try_load_config()?;
+    let _config: Config = try_load_config().into_report("load config")?;
 
     Ok(())
 }

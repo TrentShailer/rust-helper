@@ -118,6 +118,11 @@ impl<'a> Report<'a> {
         }
     }
 }
+impl Error for Report<'static> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(self.source.as_ref())
+    }
+}
 impl fmt::Debug for Report<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self}")
